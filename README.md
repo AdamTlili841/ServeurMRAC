@@ -39,8 +39,9 @@ Test : `GET http://localhost:8000/health`
 
 1. Connectez le dépôt [ServeurMRAC](https://github.com/AdamTlili841/ServeurMRAC) sur [Render](https://render.com).
 2. Choisissez **Docker** (utilise `Dockerfile` + `render.yaml`).
-3. **Important** : le plan **Free** (512 Mo RAM) est insuffisant pour PyTorch + ViT + BERT. Utilisez au minimum **Starter** (ou plus).
-4. L’app écoute sur la variable **`PORT`** fournie par Render (script `start.sh`) — ne fixez pas le port à 8000.
+3. **Important** : le plan **Free** ou **Starter** (512 Mo RAM) provoque souvent une erreur **502** au premier `/predict`. Utilisez le plan **Standard** (2 Go RAM), comme dans `render.yaml`.
+4. Le modèle est **préchargé au démarrage** (`PRELOAD_MODEL=true`). Le health check Render utilise **`/ready`** (modèle chargé).
+5. L’app écoute sur la variable **`PORT`** fournie par Render (script `start.sh`) — ne fixez pas le port à 8000.
 5. Les IP `74.220.x.x` affichées par Render servent aux bases de données privées, pas à l’extension Chrome.
 6. Une fois déployé, copiez l’URL HTTPS (ex. `https://serveur-mrac.onrender.com`).
 4. Dans l’extension Chrome, éditez `config.js` :
