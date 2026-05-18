@@ -2,10 +2,13 @@ services:
   - type: web
     name: serveur-mrac
     runtime: docker
-    plan: starter
-    healthCheckPath: /health
+    # ViT + BERT + checkpoint : ~1,5–2 Go RAM au chargement — Starter (512 Mo) provoque 502.
+    plan: standard
+    healthCheckPath: /ready
     envVars:
       - key: CORS_ORIGINS
         value: "*"
       - key: CHECKPOINT_PATH
         value: /app/best_model.pt
+      - key: PRELOAD_MODEL
+        value: "true"

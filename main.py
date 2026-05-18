@@ -7,11 +7,14 @@ from __future__ import annotations
 
 import io
 import os
+import traceback
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import torch
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from PIL import Image
 from transformers import BertTokenizer, ViTImageProcessor
 
@@ -21,29 +24,20 @@ ROOT = Path(__file__).resolve().parent
 CHECKPOINT = Path(os.environ.get("CHECKPOINT_PATH", str(ROOT / "best_model.pt")))
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-app = FastAPI(
-    title="ServeurMRAC",
-    description="API MRAC-FND — détection multimodale fake news (texte + image)",
-    version="1.0.0",
-)
-
-_cors_origins = os.environ.get("CORS_ORIGINS", "*").split(",")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[o.strip() for o in _cors_origins if o.strip()],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+PRELOAD_MODEL = os.environ.get("PRELOAD_MODEL", "true").lower() in (
+    "1",
+    "true",
+    "yes",
 )
 
 _model = None
 _tokenizer: BertTokenizer | None = None
 _processor: ViTImageProcessor | None = None
+_model_error: str | None = None
 
 
 def _load_stack() -> tuple[torch.nn.Module, BertTokenizer, ViTImageProcessor]:
-    global _model, _tokenizer, _processor
+    global _model, _tokenizer, _processor, _model_error
     if _model is None:
         if not CHECKPOINT.is_file():
             raise FileNotFoundError(
@@ -56,18 +50,76 @@ def _load_stack() -> tuple[torch.nn.Module, BertTokenizer, ViTImageProcessor]:
             "google/vit-base-patch16-224-in21k"
         )
         _model = model
+        _model_error = None
     assert _tokenizer is not None and _processor is not None and _model is not None
     return _model, _tokenizer, _processor
 
 
+def _preload_model() -> None:
+    global _model_error
+    try:
+        print(f"MRAC-FND: chargement du modèle sur {DEVICE}…", flush=True)
+        _load_stack()
+        print("MRAC-FND: modèle prêt.", flush=True)
+    except Exception as exc:
+        _model_error = str(exc)
+        traceback.print_exc()
+        print(f"MRAC-FND: échec préchargement — {exc}", flush=True)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if PRELOAD_MODEL:
+        _preload_model()
+    yield
+
+
+app = FastAPI(
+    title="ServeurMRAC",
+    description="API MRAC-FND — détection multimodale fake news (texte + image)",
+    version="1.0.1",
+    lifespan=lifespan,
+)
+
+_cors_origins = os.environ.get("CORS_ORIGINS", "*").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in _cors_origins if o.strip()],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 @app.get("/")
 def root() -> dict[str, str]:
-    return {"service": "ServeurMRAC", "docs": "/docs", "health": "/health"}
+    return {"service": "ServeurMRAC", "docs": "/docs", "health": "/health", "ready": "/ready"}
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "checkpoint": str(CHECKPOINT.name)}
+def health() -> dict[str, object]:
+    return {
+        "status": "ok",
+        "checkpoint": CHECKPOINT.name,
+        "device": str(DEVICE),
+        "model_loaded": _model is not None,
+        "model_error": _model_error,
+    }
+
+
+@app.get("/ready")
+def ready():
+    if _model is not None:
+        return {"status": "ready", "device": str(DEVICE)}
+    if _model_error:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "error", "detail": _model_error},
+        )
+    return JSONResponse(
+        status_code=503,
+        content={"status": "loading", "detail": "Modèle en cours de chargement."},
+    )
 
 
 def _blank_image() -> Image.Image:
@@ -79,6 +131,17 @@ async def predict(
     text: str = Form(...),
     image: UploadFile | None = File(None),
 ) -> dict:
+    if _model_error and _model is None:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": (
+                    f"Modèle non chargé : {_model_error}. "
+                    "Sur Render, utilisez au minimum le plan Standard (2 Go RAM)."
+                )
+            },
+        )
+
     model, tokenizer, processor = _load_stack()
 
     pil = _blank_image()
@@ -100,7 +163,7 @@ async def predict(
     attention_mask = tv["attention_mask"].to(DEVICE)
     pixel_values = pv["pixel_values"].to(DEVICE)
 
-    with torch.no_grad():
+    with torch.inference_mode():
         logits = model(
             pixel_values=pixel_values,
             input_ids=input_ids,
