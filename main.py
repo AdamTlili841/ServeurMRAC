@@ -45,10 +45,10 @@ def _load_stack() -> tuple[torch.nn.Module, BertTokenizer, ViTImageProcessor]:
                 "Ajoutez best_model.pt à la racine du dépôt (voir README)."
             )
         model, _cfg = load_from_checkpoint(str(CHECKPOINT), DEVICE)
-        _tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
-        _processor = ViTImageProcessor.from_pretrained(
-            "google/vit-base-patch16-224-in21k"
-        )
+        from multimodal_model import BERT_ID, VIT_ID
+
+        _tokenizer = BertTokenizer.from_pretrained(BERT_ID)
+        _processor = ViTImageProcessor.from_pretrained(VIT_ID)
         _model = model
         _model_error = None
     assert _tokenizer is not None and _processor is not None and _model is not None

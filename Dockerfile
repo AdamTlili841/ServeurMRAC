@@ -22,14 +22,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY multimodal_model.py main.py start.sh ./
 COPY best_model.pt ./
 
-# Télécharge ViT + BERT au build (évite timeout / crash au premier /predict).
+# Configs + tokenizer/processor au build (pas les poids HF : fournis par best_model.pt).
 RUN python -c "\
-from transformers import BertModel, BertTokenizer, ViTImageProcessor, ViTModel; \
+from transformers import BertConfig, BertTokenizer, ViTConfig, ViTImageProcessor; \
+BertConfig.from_pretrained('bert-base-uncased'); \
 BertTokenizer.from_pretrained('bert-base-uncased'); \
-BertModel.from_pretrained('bert-base-uncased'); \
+ViTConfig.from_pretrained('google/vit-base-patch16-224-in21k'); \
 ViTImageProcessor.from_pretrained('google/vit-base-patch16-224-in21k'); \
-ViTModel.from_pretrained('google/vit-base-patch16-224-in21k'); \
-print('Hugging Face weights cached.')"
+print('Hugging Face configs cached.')"
 
 RUN chmod +x /app/start.sh
 

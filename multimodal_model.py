@@ -5,20 +5,25 @@ ViT-base + BERT-base + co-attention i→t et t→i, puis fusion et classificatio
 
 from __future__ import annotations
 
+import gc
 import math
 from typing import Any
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import BertModel, ViTModel
+from transformers import BertConfig, BertModel, ViTConfig, ViTModel
+
+VIT_ID = "google/vit-base-patch16-224-in21k"
+BERT_ID = "bert-base-uncased"
 
 
 class FakeNewsDualEncoder(nn.Module):
     def __init__(self, hidden_dim: int = 512):
         super().__init__()
-        self.vit = ViTModel.from_pretrained("google/vit-base-patch16-224-in21k")
-        self.txt_encoder = BertModel.from_pretrained("bert-base-uncased")
+        # Config seulement : le checkpoint contient déjà tous les poids (évite ~2× RAM).
+        self.vit = ViTModel(ViTConfig.from_pretrained(VIT_ID))
+        self.txt_encoder = BertModel(BertConfig.from_pretrained(BERT_ID))
 
         hv = self.vit.config.hidden_size
         ht = self.txt_encoder.config.hidden_size
@@ -133,11 +138,17 @@ def load_from_checkpoint(
     path: str,
     device: torch.device | str = "cpu",
 ) -> tuple[FakeNewsDualEncoder, dict[str, Any]]:
-    payload = torch.load(path, map_location=device, weights_only=False)
+    payload = torch.load(path, map_location="cpu", weights_only=False)
     cfg = payload.get("cfg", {}) if isinstance(payload, dict) else {}
-    model = build_model(cfg)
     state = payload["model_state_dict"]
+    del payload
+    gc.collect()
+
+    model = build_model(cfg)
     model.load_state_dict(state, strict=True)
+    del state
+    gc.collect()
+
     model.to(device)
     model.eval()
     return model, cfg
