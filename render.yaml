@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: serveur-mrac
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: CORS_ORIGINS
+        value: "*"

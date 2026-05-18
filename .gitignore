@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.log
+.DS_Store
+
+# Le modèle est versionné via Git LFS (voir .gitattributes)
+# Si vous ne utilisez pas LFS, retirez la ligne ci-dessous et ajoutez best_model.pt manuellement sur le serveur.
+# best_model.pt
