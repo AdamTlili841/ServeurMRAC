@@ -9,12 +9,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY multimodal_model.py main.py ./
+COPY multimodal_model.py main.py start.sh ./
 COPY best_model.pt ./
 
+RUN chmod +x /app/start.sh
+
 ENV CHECKPOINT_PATH=/app/best_model.pt
-ENV PORT=8000
 
-EXPOSE 8000
+# Render injecte PORT (souvent 10000) — l'app doit écouter sur cette variable.
+EXPOSE 10000
 
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT}
+CMD ["/app/start.sh"]

@@ -2,8 +2,10 @@ services:
   - type: web
     name: serveur-mrac
     runtime: docker
-    plan: free
+    plan: starter
     healthCheckPath: /health
     envVars:
       - key: CORS_ORIGINS
         value: "*"
+      - key: CHECKPOINT_PATH
+        value: /app/best_model.pt
