@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import os
+import threading
 import traceback
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -18,8 +19,9 @@ from fastapi.responses import JSONResponse
 from PIL import Image
 from transformers import BertTokenizer, ViTImageProcessor
 
-from multimodal_model import load_from_checkpoint
+from multimodal_model import BERT_ID, VIT_ID, load_from_checkpoint
 
+APP_VERSION = "1.0.2"
 ROOT = Path(__file__).resolve().parent
 CHECKPOINT = Path(os.environ.get("CHECKPOINT_PATH", str(ROOT / "best_model.pt")))
 
@@ -34,6 +36,8 @@ _model = None
 _tokenizer: BertTokenizer | None = None
 _processor: ViTImageProcessor | None = None
 _model_error: str | None = None
+_preload_lock = threading.Lock()
+_preload_started = False
 
 
 def _load_stack() -> tuple[torch.nn.Module, BertTokenizer, ViTImageProcessor]:
@@ -45,8 +49,6 @@ def _load_stack() -> tuple[torch.nn.Module, BertTokenizer, ViTImageProcessor]:
                 "Ajoutez best_model.pt à la racine du dépôt (voir README)."
             )
         model, _cfg = load_from_checkpoint(str(CHECKPOINT), DEVICE)
-        from multimodal_model import BERT_ID, VIT_ID
-
         _tokenizer = BertTokenizer.from_pretrained(BERT_ID)
         _processor = ViTImageProcessor.from_pretrained(VIT_ID)
         _model = model
@@ -67,17 +69,32 @@ def _preload_model() -> None:
         print(f"MRAC-FND: échec préchargement — {exc}", flush=True)
 
 
+def _start_preload_background() -> None:
+    global _preload_started
+    with _preload_lock:
+        if _preload_started:
+            return
+        _preload_started = True
+
+    threading.Thread(
+        target=_preload_model,
+        name="mrac-preload",
+        daemon=True,
+    ).start()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    print(f"ServeurMRAC v{APP_VERSION} (preload={PRELOAD_MODEL})", flush=True)
     if PRELOAD_MODEL:
-        _preload_model()
+        _start_preload_background()
     yield
 
 
 app = FastAPI(
     title="ServeurMRAC",
     description="API MRAC-FND — détection multimodale fake news (texte + image)",
-    version="1.0.1",
+    version=APP_VERSION,
     lifespan=lifespan,
 )
 
@@ -100,6 +117,7 @@ def root() -> dict[str, str]:
 def health() -> dict[str, object]:
     return {
         "status": "ok",
+        "version": APP_VERSION,
         "checkpoint": CHECKPOINT.name,
         "device": str(DEVICE),
         "model_loaded": _model is not None,

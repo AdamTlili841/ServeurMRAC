@@ -40,7 +40,7 @@ Test : `GET http://localhost:8000/health`
 1. Connectez le dépôt [ServeurMRAC](https://github.com/AdamTlili841/ServeurMRAC) sur [Render](https://render.com).
 2. Choisissez **Docker** (utilise `Dockerfile` + `render.yaml`).
 3. **Important** : le plan **Free** ou **Starter** (512 Mo RAM) provoque souvent une erreur **502** au premier `/predict`. Utilisez le plan **Standard** (2 Go RAM), comme dans `render.yaml`.
-4. Le modèle est **préchargé au démarrage** (`PRELOAD_MODEL=true`). Le health check Render utilise **`/ready`** (modèle chargé).
+4. Le modèle est **préchargé en arrière-plan** (`PRELOAD_MODEL=true`). Health check Render : **`/health`**. L’API **`/ready`** indique si le modèle est chargé (à utiliser avant les tests).
 5. L’app écoute sur la variable **`PORT`** fournie par Render (script `start.sh`) — ne fixez pas le port à 8000.
 5. Les IP `74.220.x.x` affichées par Render servent aux bases de données privées, pas à l’extension Chrome.
 6. Une fois déployé, copiez l’URL HTTPS (ex. `https://serveur-mrac.onrender.com`).
@@ -55,8 +55,12 @@ export const API_BASE_URL = "https://VOTRE-APP.onrender.com";
 ### `GET /health`
 
 ```json
-{ "status": "ok", "checkpoint": "best_model.pt" }
+{ "status": "ok", "version": "1.0.2", "checkpoint": "best_model.pt", "model_loaded": true }
 ```
+
+### `GET /ready`
+
+`200` si le modèle est prêt ; `503` pendant le chargement ou en cas d’erreur (ex. manque de RAM).
 
 ### `POST /predict`
 

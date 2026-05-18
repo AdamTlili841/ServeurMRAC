@@ -4,7 +4,9 @@ services:
     runtime: docker
     # ViT + BERT + checkpoint : ~1,5–2 Go RAM au chargement — Starter (512 Mo) provoque 502.
     plan: standard
-    healthCheckPath: /ready
+    # /health : processus vivant (évite boucle si ancienne image sans /ready).
+    # L’extension et les tests utilisent /ready pour savoir si le modèle est chargé.
+    healthCheckPath: /health
     envVars:
       - key: CORS_ORIGINS
         value: "*"
